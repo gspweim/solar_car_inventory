@@ -1,0 +1,607 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: CalSol Inventory Tracker - SAM Template
+
+Globals:
+  Function:
+    Runtime: python3.12
+    Timeout: 30
+    MemorySize: 256
+    Environment:
+      Variables:
+        USERS_TABLE: !Ref UsersTable
+        CARS_TABLE: !Ref CarsTable
+        PARTS_TABLE: !Ref PartsTable
+        PART_HISTORY_TABLE: !Ref PartHistoryTable
+        MILES_LOG_TABLE: !Ref MilesLogTable
+        PART_FIELDS_TABLE: !Ref PartFieldsTable
+        GOOGLE_CLIENT_ID: !Ref GoogleClientId
+        ALLOWED_ORIGIN: !Ref AllowedOrigin
+        JWT_SECRET: !Ref JwtSecret
+  Api:
+    Cors:
+      AllowMethods: "'GET,POST,PUT,DELETE,OPTIONS'"
+      AllowHeaders: "'Content-Type,Authorization'"
+      AllowOrigin: !Sub "'${AllowedOrigin}'"
+
+Parameters:
+  GoogleClientId:
+    Type: String
+    Description: Google OAuth Client ID
+  AllowedOrigin:
+    Type: String
+    Default: "https://inventory.calsol.org"
+    Description: Frontend origin for CORS
+  JwtSecret:
+    Type: String
+    NoEcho: true
+    Description: Secret key for signing JWT tokens
+  Environment:
+    Type: String
+    Default: prod
+    AllowedValues: [dev, prod]
+
+Resources:
+
+  # ─── API Gateway ───────────────────────────────────────────────────────────
+  CalSolApi:
+    Type: AWS::Serverless::Api
+    Properties:
+      Name: !Sub "calsol-inventory-api-${Environment}"
+      StageName: !Ref Environment
+      Auth:
+        DefaultAuthorizer: NONE
+
+  # ─── DynamoDB Tables ───────────────────────────────────────────────────────
+  UsersTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub "calsol-users-${Environment}"
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: user_id
+          AttributeType: S
+        - AttributeName: email
+          AttributeType: S
+      KeySchema:
+        - AttributeName: user_id
+          KeyType: HASH
+      GlobalSecondaryIndexes:
+        - IndexName: email-index
+          KeySchema:
+            - AttributeName: email
+              KeyType: HASH
+          Projection:
+            ProjectionType: ALL
+
+  CarsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub "calsol-cars-${Environment}"
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: car_id
+          AttributeType: S
+      KeySchema:
+        - AttributeName: car_id
+          KeyType: HASH
+
+  PartsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub "calsol-parts-${Environment}"
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: part_id
+          AttributeType: S
+        - AttributeName: car_id
+          AttributeType: S
+      KeySchema:
+        - AttributeName: part_id
+          KeyType: HASH
+      GlobalSecondaryIndexes:
+        - IndexName: car-index
+          KeySchema:
+            - AttributeName: car_id
+              KeyType: HASH
+          Projection:
+            ProjectionType: ALL
+
+  PartHistoryTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub "calsol-part-history-${Environment}"
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: history_id
+          AttributeType: S
+        - AttributeName: car_id
+          AttributeType: S
+        - AttributeName: replaced_at
+          AttributeType: S
+      KeySchema:
+        - AttributeName: history_id
+          KeyType: HASH
+      GlobalSecondaryIndexes:
+        - IndexName: car-history-index
+          KeySchema:
+            - AttributeName: car_id
+              KeyType: HASH
+            - AttributeName: replaced_at
+              KeyType: RANGE
+          Projection:
+            ProjectionType: ALL
+
+  MilesLogTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub "calsol-miles-log-${Environment}"
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: log_id
+          AttributeType: S
+        - AttributeName: car_id
+          AttributeType: S
+        - AttributeName: logged_at
+          AttributeType: S
+      KeySchema:
+        - AttributeName: log_id
+          KeyType: HASH
+      GlobalSecondaryIndexes:
+        - IndexName: car-miles-index
+          KeySchema:
+            - AttributeName: car_id
+              KeyType: HASH
+            - AttributeName: logged_at
+              KeyType: RANGE
+          Projection:
+            ProjectionType: ALL
+
+  PartFieldsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub "calsol-part-fields-${Environment}"
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: field_id
+          AttributeType: S
+      KeySchema:
+        - AttributeName: field_id
+          KeyType: HASH
+
+  # ─── Lambda Functions ──────────────────────────────────────────────────────
+
+  # Auth
+  GoogleLoginFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub "calsol-auth-google-login-${Environment}"
+      CodeUri: backend/lambdas/auth/
+      Handler: google_login.handler
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref UsersTable
+      Events:
+        Api:
+          Type: Api
+          Properties:
+            RestApiId: !Ref CalSolApi
+            Path: /auth/google
+            Method: POST
+
+  GetMeFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub "calsol-auth-me-${Environment}"
+      CodeUri: backend/lambdas/auth/
+      Handler: me.handler
+      Policies:
+        - DynamoDBReadPolicy:
+            TableName: !Ref UsersTable
+      Events:
+        Api:
+          Type: Api
+          Properties:
+            RestApiId: !Ref CalSolApi
+            Path: /auth/me
+            Method: GET
+
+  ListUsersFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub "calsol-auth-list-users-${Environment}"
+      CodeUri: backend/lambdas/auth/
+      Handler: list_users.handler
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref UsersTable
+      Events:
+        Api:
+          Type: Api
+          Properties:
+            RestApiId: !Ref CalSolApi
+            Path: /auth/users
+            Method: GET
+
+  UpdateUserFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub "calsol-auth-update-user-${Environment}"
+      CodeUri: backend/lambdas/auth/
+      Handler: update_user.handler
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref UsersTable
+      Events:
+        Api:
+          Type: Api
+          Properties:
+            RestApiId: !Ref CalSolApi
+            Path: /auth/users/{user_id}
+            Method: PUT
+
+  # Cars
+  ListCarsFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub "calsol-cars-list-${Environment}"
+      CodeUri: backend/lambdas/cars/
+      Handler: list_cars.handler
+      Policies:
+        - DynamoDBReadPolicy:
+            TableName: !Ref CarsTable
+      Events:
+        Api:
+          Type: Api
+          Properties:
+            RestApiId: !Ref CalSolApi
+            Path: /cars
+            Method: GET
+
+  CreateCarFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub "calsol-cars-create-${Environment}"
+      CodeUri: backend/lambdas/cars/
+      Handler: create_car.handler
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref CarsTable
+      Events:
+        Api:
+          Type: Api
+          Properties:
+            RestApiId: !Ref CalSolApi
+            Path: /cars
+            Method: POST
+
+  UpdateCarFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub "calsol-cars-update-${Environment}"
+      CodeUri: backend/lambdas/cars/
+      Handler: update_car.handler
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref CarsTable
+      Events:
+        Api:
+          Type: Api
+          Properties:
+            RestApiId: !Ref CalSolApi
+            Path: /cars/{car_id}
+            Method: PUT
+
+  DeleteCarFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub "calsol-cars-delete-${Environment}"
+      CodeUri: backend/lambdas/cars/
+      Handler: delete_car.handler
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref CarsTable
+      Events:
+        Api:
+          Type: Api
+          Properties:
+            RestApiId: !Ref CalSolApi
+            Path: /cars/{car_id}
+            Method: DELETE
+
+  # Parts
+  ListPartsFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub "calsol-parts-list-${Environment}"
+      CodeUri: backend/lambdas/parts/
+      Handler: list_parts.handler
+      Policies:
+        - DynamoDBReadPolicy:
+            TableName: !Ref PartsTable
+      Events:
+        Api:
+          Type: Api
+          Properties:
+            RestApiId: !Ref CalSolApi
+            Path: /cars/{car_id}/parts
+            Method: GET
+
+  CreatePartFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub "calsol-parts-create-${Environment}"
+      CodeUri: backend/lambdas/parts/
+      Handler: create_part.handler
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref PartsTable
+        - DynamoDBReadPolicy:
+            TableName: !Ref PartFieldsTable
+      Events:
+        Api:
+          Type: Api
+          Properties:
+            RestApiId: !Ref CalSolApi
+            Path: /cars/{car_id}/parts
+            Method: POST
+
+  GetPartFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub "calsol-parts-get-${Environment}"
+      CodeUri: backend/lambdas/parts/
+      Handler: get_part.handler
+      Policies:
+        - DynamoDBReadPolicy:
+            TableName: !Ref PartsTable
+      Events:
+        Api:
+          Type: Api
+          Properties:
+            RestApiId: !Ref CalSolApi
+            Path: /cars/{car_id}/parts/{part_id}
+            Method: GET
+
+  UpdatePartFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub "calsol-parts-update-${Environment}"
+      CodeUri: backend/lambdas/parts/
+      Handler: update_part.handler
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref PartsTable
+      Events:
+        Api:
+          Type: Api
+          Properties:
+            RestApiId: !Ref CalSolApi
+            Path: /cars/{car_id}/parts/{part_id}
+            Method: PUT
+
+  ReplacePartFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub "calsol-parts-replace-${Environment}"
+      CodeUri: backend/lambdas/parts/
+      Handler: replace_part.handler
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref PartsTable
+        - DynamoDBCrudPolicy:
+            TableName: !Ref PartHistoryTable
+      Events:
+        Api:
+          Type: Api
+          Properties:
+            RestApiId: !Ref CalSolApi
+            Path: /cars/{car_id}/parts/{part_id}/replace
+            Method: POST
+
+  DeletePartFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub "calsol-parts-delete-${Environment}"
+      CodeUri: backend/lambdas/parts/
+      Handler: delete_part.handler
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref PartsTable
+      Events:
+        Api:
+          Type: Api
+          Properties:
+            RestApiId: !Ref CalSolApi
+            Path: /cars/{car_id}/parts/{part_id}
+            Method: DELETE
+
+  # Part History
+  GetPartHistoryFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub "calsol-parts-history-${Environment}"
+      CodeUri: backend/lambdas/parts/
+      Handler: part_history.handler
+      Policies:
+        - DynamoDBReadPolicy:
+            TableName: !Ref PartHistoryTable
+      Events:
+        Api:
+          Type: Api
+          Properties:
+            RestApiId: !Ref CalSolApi
+            Path: /cars/{car_id}/history
+            Method: GET
+
+  # Part Fields (dynamic fields)
+  ListPartFieldsFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub "calsol-part-fields-list-${Environment}"
+      CodeUri: backend/lambdas/parts/
+      Handler: list_fields.handler
+      Policies:
+        - DynamoDBReadPolicy:
+            TableName: !Ref PartFieldsTable
+      Events:
+        Api:
+          Type: Api
+          Properties:
+            RestApiId: !Ref CalSolApi
+            Path: /part-fields
+            Method: GET
+
+  CreatePartFieldFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub "calsol-part-fields-create-${Environment}"
+      CodeUri: backend/lambdas/parts/
+      Handler: create_field.handler
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref PartFieldsTable
+      Events:
+        Api:
+          Type: Api
+          Properties:
+            RestApiId: !Ref CalSolApi
+            Path: /part-fields
+            Method: POST
+
+  # Miles
+  LogMilesFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub "calsol-miles-log-${Environment}"
+      CodeUri: backend/lambdas/miles/
+      Handler: log_miles.handler
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref MilesLogTable
+        - DynamoDBCrudPolicy:
+            TableName: !Ref PartsTable
+      Events:
+        Api:
+          Type: Api
+          Properties:
+            RestApiId: !Ref CalSolApi
+            Path: /cars/{car_id}/miles
+            Method: POST
+
+  GetMilesLogFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub "calsol-miles-get-log-${Environment}"
+      CodeUri: backend/lambdas/miles/
+      Handler: get_miles_log.handler
+      Policies:
+        - DynamoDBReadPolicy:
+            TableName: !Ref MilesLogTable
+      Events:
+        Api:
+          Type: Api
+          Properties:
+            RestApiId: !Ref CalSolApi
+            Path: /cars/{car_id}/miles
+            Method: GET
+
+  # Reports
+  ReportHighMilesFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub "calsol-report-high-miles-${Environment}"
+      CodeUri: backend/lambdas/reports/
+      Handler: high_miles.handler
+      Policies:
+        - DynamoDBReadPolicy:
+            TableName: !Ref PartsTable
+      Events:
+        Api:
+          Type: Api
+          Properties:
+            RestApiId: !Ref CalSolApi
+            Path: /cars/{car_id}/reports/high-miles
+            Method: GET
+
+  ReportMBFFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub "calsol-report-mbf-${Environment}"
+      CodeUri: backend/lambdas/reports/
+      Handler: miles_between_failures.handler
+      Policies:
+        - DynamoDBReadPolicy:
+            TableName: !Ref PartHistoryTable
+        - DynamoDBReadPolicy:
+            TableName: !Ref PartsTable
+      Events:
+        Api:
+          Type: Api
+          Properties:
+            RestApiId: !Ref CalSolApi
+            Path: /cars/{car_id}/reports/mbf
+            Method: GET
+
+  ReportLikelyToFailFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub "calsol-report-likely-fail-${Environment}"
+      CodeUri: backend/lambdas/reports/
+      Handler: likely_to_fail.handler
+      Policies:
+        - DynamoDBReadPolicy:
+            TableName: !Ref PartsTable
+        - DynamoDBReadPolicy:
+            TableName: !Ref PartHistoryTable
+      Events:
+        Api:
+          Type: Api
+          Properties:
+            RestApiId: !Ref CalSolApi
+            Path: /cars/{car_id}/reports/likely-to-fail
+            Method: GET
+
+  # Upload
+  UploadSpreadsheetFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub "calsol-upload-spreadsheet-${Environment}"
+      CodeUri: backend/lambdas/upload/
+      Handler: upload_spreadsheet.handler
+      MemorySize: 512
+      Timeout: 60
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref PartsTable
+        - DynamoDBReadPolicy:
+            TableName: !Ref PartFieldsTable
+      Events:
+        Api:
+          Type: Api
+          Properties:
+            RestApiId: !Ref CalSolApi
+            Path: /cars/{car_id}/upload
+            Method: POST
+
+Outputs:
+  ApiUrl:
+    Description: API Gateway endpoint URL
+    Value: !Sub "https://${CalSolApi}.execute-api.${AWS::Region}.amazonaws.com/${Environment}"
+    Export:
+      Name: !Sub "CalSolApiUrl-${Environment}"
+
+  UsersTableName:
+    Value: !Ref UsersTable
+    Export:
+      Name: !Sub "CalSolUsersTable-${Environment}"
+
+  CarsTableName:
+    Value: !Ref CarsTable
+    Export:
+      Name: !Sub "CalSolCarsTable-${Environment}"
+
+  PartsTableName:
+    Value: !Ref PartsTable
+    Export:
+      Name: !Sub "CalSolPartsTable-${Environment}"

@@ -1,0 +1,19 @@
+The full CalSol Inventory Tracker application has been built. Here's a summary of everything created:
+
+**Backend (AWS Lambda + DynamoDB via SAM)**
+- `template.yaml` — AWS SAM IaC defining 6 DynamoDB tables, 20+ Lambda functions, and API Gateway with CORS
+- `backend/lambdas/shared/utils.py` — JWT auth middleware (`@require_auth`, `@require_write`), response helpers
+- `scripts/build.sh` — distributes shared utils to all Lambda packages before deploy
+- Lambda functions for: Auth (Google OAuth login, me, list users, update user), Cars (CRUD), Parts (list, get, create, update, replace, delete, history, custom fields), Miles (log + get), Reports (high miles, MBF, likely-to-fail), Upload (xlsx/csv bulk import)
+
+**Frontend (React 18 SPA)**
+- Full React app with React Router, TanStack Query, Recharts, react-hot-toast, react-dropzone
+- Pages: Login (Google Sign-In), Dashboard, Cars, Parts (with add/replace modals), Part Detail (edit), Miles Log, History, Reports (3 tabs with bar charts), Upload (drag-and-drop), Admin (user management + custom fields)
+- CalSol blue/gold branded CSS design system
+
+**DevOps**
+- `.github/workflows/deploy.yml` — GitHub Actions CI/CD: SAM deploy backend → build React → sync to S3 → CloudFront invalidation
+- `docs/01-google-oauth-setup.md` — step-by-step Google Cloud Console setup
+- `docs/02-aws-setup.md` — full AWS setup: IAM, SAM deploy, S3, CloudFront, Route 53, SSL cert, GitHub secrets
+- `README.md` — architecture diagram, project structure, API reference, quick start guide
+- `.gitignore` — covers Python, Node, SAM artifacts, secrets

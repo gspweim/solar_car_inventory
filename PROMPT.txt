@@ -1,0 +1,44 @@
+I am writing an inventory tracker program for CalSol
+This is the solar powered car design, manufacturing and racing team at UC Berkeley. 
+The tracker program should
+- Have a list of all parts on the car
+- Each day the team will test the car and enter the number of miles driven, all parts should have their miles used variable incremented by this value. They could test multiple times per day, or none. 
+- When a part fails, is upgraded, is replaced as part of routine maintenance, the user will replace the part on the car and note it in the inventory. The user  should be prompted with a dropdown of why it is being switched out, and then a note field for a text explanation. That part should now be used from the active inventory  list but all the data about it logged. The user should then be asked “did you replace the part with the same model”, if yes, add a copy of the old part to the active inventory with 0 miles used on the part
+- allow users to manually add parts to the active inventory, and pick from a selected dropdown of previous parts, or create a new one
+- parts should have the fields part_number, part_name, miles used, part group (suspension, drivetrain, engine, body), part location (front right, front left, rear right, rear left, front center, rear center, center center)
+- other part fields might need to be added by the user, example wrench used, thread, designer.., purchased from, cost
+- allow users to manually add parts by uploading a spreadsheet
+- have some nice engineering reports for the user. Whatever silly engineers use, miles between failures? A report that lets you know what part is likely to fail soon, a report of the parts that have the most miles on them
+- allow multiple cars to be in the system. Say the main car, and then the backup car, each having it’s own parts inventory
+- Basically crud operations on the parts inventory, dynamic fields, and drop-downs created on what we have seen before.
+- Users should be able to login with their google account
+- Users are readonly by default, but an admin user can reject them, or make them an admin
+
+Architecture
+The goal is to run things on the most current and standard stuff, so the silly engineers can’t complain that it is old tech.
+- AWS services
+  * Compute: AWS Lambda
+      - Runtime:  Python 3.12 (fastest cold starts)
+      - Each API endpoint = separate Lambda function
+  * API Layer: API Gateway
+      - HTTP API
+  * Database: Dynamo DB
+  * Frontend
+      - S3 Bucket
+      - Cloudfront
+      - html/react/css
+      - Route 53
+  * Infrastructure as Code (IaC)
+      - AWS SAM
+      - yaml
+
+Please write the code for all of this
+As well as MD files for how to setup each of the AWS services in AWS.
+Maybe the yaml files and other files containing things to paste into aws 
+I do have and aws account 
+I will probably purchase the calsol.org domain. 
+I use GitHub
+This is a large task, feel free to break the task into separate prompt files if it helps you to organize things, and in case of crashes.
+
+
+
