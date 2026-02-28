@@ -23,7 +23,7 @@ done
 
 echo ""
 echo "Installing Python dependencies for upload Lambda (openpyxl)..."
-pip install openpyxl -t backend/lambdas/upload/ --quiet
+pip3 install openpyxl -t backend/lambdas/upload/ --quiet
 
 echo ""
 echo "Running sam build..."

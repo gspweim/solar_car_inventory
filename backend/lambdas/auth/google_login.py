@@ -37,7 +37,7 @@ def verify_google_token(id_token: str) -> dict | None:
     except Exception:
         return None
 
-    # Validate audience
+    # Validate audience please
     if data.get("aud") != GOOGLE_CLIENT_ID:
         return None
     if data.get("email_verified") != "true":

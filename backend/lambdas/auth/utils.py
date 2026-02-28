@@ -1,8 +1,7 @@
 """
-Shared utilities for Lambda functions:
-- JWT creation / verification
-- CORS response helpers
-- Auth middleware (require_auth, require_admin)
+Shared utilities - canonical copy used by all Lambda functions.
+This file is symlinked / copied into each Lambda package at build time.
+See scripts/build.sh for details.
 """
 import json
 import os
@@ -73,7 +72,6 @@ def _b64url_decode(s: str) -> bytes:
 
 
 def create_jwt(payload: dict, expires_in: int = 86400 * 7) -> str:
-    """Create a signed JWT token valid for `expires_in` seconds (default 7 days)."""
     header = _b64url_encode(json.dumps({"alg": "HS256", "typ": "JWT"}).encode())
     payload = dict(payload)
     payload["iat"] = int(time.time())
@@ -84,8 +82,7 @@ def create_jwt(payload: dict, expires_in: int = 86400 * 7) -> str:
     return f"{header}.{body}.{_b64url_encode(sig)}"
 
 
-def verify_jwt(token: str) -> dict | None:
-    """Verify a JWT token. Returns payload dict or None if invalid/expired."""
+def verify_jwt(token: str):
     try:
         parts = token.split(".")
         if len(parts) != 3:
@@ -105,7 +102,7 @@ def verify_jwt(token: str) -> dict | None:
 
 # ─── Auth middleware decorators ───────────────────────────────────────────────
 
-def get_token_from_event(event: dict) -> str | None:
+def get_token_from_event(event: dict):
     headers = event.get("headers") or {}
     auth_header = headers.get("Authorization") or headers.get("authorization") or ""
     if auth_header.startswith("Bearer "):
@@ -114,7 +111,6 @@ def get_token_from_event(event: dict) -> str | None:
 
 
 def require_auth(func):
-    """Decorator: injects `user` into kwargs, returns 401 if not authenticated."""
     @wraps(func)
     def wrapper(event, context, **kwargs):
         token = get_token_from_event(event)
@@ -128,7 +124,6 @@ def require_auth(func):
 
 
 def require_admin(func):
-    """Decorator: injects `user` into kwargs, returns 403 if not admin."""
     @wraps(func)
     def wrapper(event, context, **kwargs):
         token = get_token_from_event(event)
@@ -144,7 +139,6 @@ def require_admin(func):
 
 
 def require_write(func):
-    """Decorator: injects `user`, returns 403 if user is readonly."""
     @wraps(func)
     def wrapper(event, context, **kwargs):
         token = get_token_from_event(event)
