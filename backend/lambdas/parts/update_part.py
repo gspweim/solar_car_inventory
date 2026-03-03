@@ -69,7 +69,8 @@ def handler(event, context, user=None):
             expr_names[key] = field
             value = body[field]
             if field == "miles_used":
-                value = int(value)
+                from decimal import Decimal
+                value = Decimal(str(float(value)))
             expr_values[val] = value
 
     # Merge extra_fields

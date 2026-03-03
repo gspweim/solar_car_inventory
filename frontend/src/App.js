@@ -25,6 +25,18 @@ function RequireAdmin({ children }) {
   return children;
 }
 
+/**
+ * Admin page is accessible to all authenticated users:
+ * - Admin: can view AND edit users (change roles/status)
+ * - Normal: can view users (read-only)
+ * - Readonly: can view users (read-only)
+ */
+function RequireUsersAccess({ children }) {
+  const { user } = useAuth();
+  if (!user) return <Navigate to="/login" replace />;
+  return children;
+}
+
 export default function App() {
   return (
     <Routes>
@@ -48,9 +60,9 @@ export default function App() {
         <Route
           path="admin"
           element={
-            <RequireAdmin>
+            <RequireUsersAccess>
               <AdminPage />
-            </RequireAdmin>
+            </RequireUsersAccess>
           }
         />
       </Route>

@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useParams, Link, useSearchParams } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
-  listParts, createPart, deletePart, listPartFields, replacePart
+  listParts, createPart, deletePart, listPartFields, replacePart, updatePart
 } from '../api/client';
 import { useAuth } from '../hooks/useAuth';
 import toast from 'react-hot-toast';
@@ -16,7 +16,7 @@ const REPLACE_REASONS = ['failure', 'upgrade', 'routine_maintenance', 'other'];
 
 export default function PartsPage() {
   const { carId } = useParams();
-  const { canWrite, isAdmin } = useAuth();
+  const { canWrite, canDelete } = useAuth();
   const qc = useQueryClient();
   const [searchParams] = useSearchParams();
   const [groupFilter, setGroupFilter] = useState(searchParams.get('group') || '');
@@ -24,6 +24,7 @@ export default function PartsPage() {
   const [search, setSearch] = useState('');
   const [showAddModal, setShowAddModal] = useState(false);
   const [replaceTarget, setReplaceTarget] = useState(null);
+  const [editMilesTarget, setEditMilesTarget] = useState(null);
 
   const { data, isLoading } = useQuery({
     queryKey: ['parts', carId, groupFilter, locationFilter],
@@ -145,12 +146,20 @@ export default function PartsPage() {
                         {canWrite && (
                           <button
                             className="btn btn-outline btn-sm"
+                            onClick={() => setEditMilesTarget(p)}
+                          >
+                            Miles
+                          </button>
+                        )}
+                        {canWrite && (
+                          <button
+                            className="btn btn-outline btn-sm"
                             onClick={() => setReplaceTarget(p)}
                           >
                             Replace
                           </button>
                         )}
-                        {isAdmin && (
+                        {canDelete && (
                           <button
                             className="btn btn-danger btn-sm"
                             onClick={() => handleDelete(p)}
@@ -188,6 +197,18 @@ export default function PartsPage() {
           onSaved={() => {
             qc.invalidateQueries(['parts', carId]);
             setReplaceTarget(null);
+          }}
+        />
+      )}
+
+      {editMilesTarget && (
+        <EditMilesModal
+          carId={carId}
+          part={editMilesTarget}
+          onClose={() => setEditMilesTarget(null)}
+          onSaved={() => {
+            qc.invalidateQueries(['parts', carId]);
+            setEditMilesTarget(null);
           }}
         />
       )}
@@ -314,6 +335,72 @@ function AddPartModal({ carId, fields, onClose, onSaved }) {
             <button type="button" className="btn btn-outline" onClick={onClose}>Cancel</button>
             <button type="submit" className="btn btn-primary" disabled={saving}>
               {saving ? 'Saving…' : 'Add Part'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+// ─── Edit Miles Modal ─────────────────────────────────────────────────────────
+function EditMilesModal({ carId, part, onClose, onSaved }) {
+  const [miles, setMiles] = useState(parseFloat(part.miles_used || 0).toFixed(1));
+  const [saving, setSaving] = useState(false);
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    const val = parseFloat(miles);
+    if (isNaN(val) || val < 0) {
+      toast.error('Please enter a valid miles value (≥ 0)');
+      return;
+    }
+    setSaving(true);
+    try {
+      await updatePart(carId, part.part_id, { miles_used: val });
+      toast.success('Miles updated!');
+      onSaved();
+    } catch (err) {
+      toast.error(err?.response?.data?.error || 'Update failed');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal" style={{ maxWidth: 400 }} onClick={(e) => e.stopPropagation()}>
+        <div className="modal-header">
+          <h3>Edit Miles — {part.part_name}</h3>
+          <button className="modal-close" onClick={onClose}>✕</button>
+        </div>
+        <form onSubmit={handleSubmit}>
+          <div className="modal-body">
+            <div style={{ background: 'var(--bg)', borderRadius: 'var(--radius)', padding: '10px 12px', fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: 16 }}>
+              <strong>Part #:</strong> {part.part_number} &nbsp;·&nbsp;
+              <strong>Location:</strong> {part.part_location?.replace(/_/g, ' ')}
+            </div>
+            <div className="form-group">
+              <label>Miles Used *</label>
+              <input
+                className="form-control"
+                type="number"
+                min="0"
+                step="0.1"
+                required
+                autoFocus
+                value={miles}
+                onChange={(e) => setMiles(e.target.value)}
+              />
+              <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: 4 }}>
+                Current value: {parseFloat(part.miles_used || 0).toFixed(1)} mi
+              </div>
+            </div>
+          </div>
+          <div className="modal-footer">
+            <button type="button" className="btn btn-outline" onClick={onClose}>Cancel</button>
+            <button type="submit" className="btn btn-primary" disabled={saving}>
+              {saving ? 'Saving…' : 'Save Miles'}
             </button>
           </div>
         </form>

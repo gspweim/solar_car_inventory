@@ -13,7 +13,7 @@ const LOCATIONS = [
 
 export default function PartDetailPage() {
   const { carId, partId } = useParams();
-  const { canWrite } = useAuth();
+  const { canWrite, canDelete } = useAuth();
   const qc = useQueryClient();
   const navigate = useNavigate();
   const [editing, setEditing] = useState(false);

@@ -3,6 +3,13 @@ import { googleLogin, getMe } from '../api/client';
 
 const AuthContext = createContext(null);
 
+/**
+ * Role hierarchy:
+ *   admin    - full access (create, read, update, delete, manage users)
+ *   normal   - can log tests, add/edit data, view users; cannot delete or manage users
+ *   readonly - read-only access only
+ */
+
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(() => {
     try {
@@ -43,11 +50,38 @@ export function AuthProvider({ children }) {
     }
   }, [logout]);
 
+  // Role checks
   const isAdmin = user?.role === 'admin';
-  const canWrite = user?.role === 'admin'; // extend if you add "editor" role
+  const isNormal = user?.role === 'normal';
+  const isReadOnly = user?.role === 'readonly';
+
+  // canWrite: admin and normal users can add/edit data and log tests
+  const canWrite = user?.role === 'admin' || user?.role === 'normal';
+
+  // canDelete: only admin users can delete records
+  const canDelete = user?.role === 'admin';
+
+  // canManageUsers: only admin users can change roles/status
+  const canManageUsers = user?.role === 'admin';
+
+  // canViewUsers: all authenticated users can view the user list
+  const canViewUsers = !!user;
 
   return (
-    <AuthContext.Provider value={{ user, loading, login, logout, refreshUser, isAdmin, canWrite }}>
+    <AuthContext.Provider value={{
+      user,
+      loading,
+      login,
+      logout,
+      refreshUser,
+      isAdmin,
+      isNormal,
+      isReadOnly,
+      canWrite,
+      canDelete,
+      canManageUsers,
+      canViewUsers,
+    }}>
       {children}
     </AuthContext.Provider>
   );

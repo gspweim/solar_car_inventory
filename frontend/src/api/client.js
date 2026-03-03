@@ -89,6 +89,9 @@ export const logMiles = (carId, data) =>
 export const getMilesLog = (carId, params = {}) =>
   client.get(`/cars/${carId}/miles`, { params }).then((r) => r.data);
 
+export const editMilesLog = (carId, logId, data) =>
+  client.put(`/cars/${carId}/miles/${logId}`, data).then((r) => r.data);
+
 // ─── Reports ──────────────────────────────────────────────────────────────────
 export const reportHighMiles = (carId, params = {}) =>
   client.get(`/cars/${carId}/reports/high-miles`, { params }).then((r) => r.data);

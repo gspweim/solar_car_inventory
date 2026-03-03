@@ -14,7 +14,7 @@ export default function DashboardPage() {
 
   const { data: milesData } = useQuery({
     queryKey: ['miles', carId],
-    queryFn: () => getMilesLog(carId, { limit: 10 }),
+    queryFn: () => getMilesLog(carId, { limit: 1000 }),
     enabled: !!carId,
   });
 
@@ -30,7 +30,10 @@ export default function DashboardPage() {
     (p) => p.risk_label === 'CRITICAL' || p.risk_label === 'HIGH'
   );
 
-  const totalMiles = parts.reduce((sum, p) => {
+  // Total miles driven by the car = sum of all logged session miles
+  const totalMiles = milesLog.reduce((sum, m) => sum + parseFloat(m.miles || 0), 0);
+
+  const maxPartMiles = parts.reduce((sum, p) => {
     const m = parseFloat(p.miles_used || 0);
     return sum > m ? sum : m;
   }, 0);
@@ -68,7 +71,7 @@ export default function DashboardPage() {
         </div>
         <div className="stat-card">
           <div className="stat-value">{totalMiles.toFixed(1)}</div>
-          <div className="stat-label">Max Part Miles</div>
+          <div className="stat-label">Total Miles</div>
         </div>
         <div className="stat-card">
           <div className="stat-value" style={{ color: atRisk.length > 0 ? 'var(--danger)' : undefined }}>

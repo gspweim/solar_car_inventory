@@ -2,6 +2,11 @@
 Shared utilities - canonical copy used by all Lambda functions.
 This file is symlinked / copied into each Lambda package at build time.
 See scripts/build.sh for details.
+
+Role hierarchy:
+  admin    - full access (create, read, update, delete, manage users)
+  normal   - can log tests, add/edit data, view users; cannot delete or manage users
+  readonly - read-only access only
 """
 import json
 import os
@@ -13,6 +18,14 @@ from functools import wraps
 
 ALLOWED_ORIGIN = os.environ.get("ALLOWED_ORIGIN", "*")
 JWT_SECRET = os.environ.get("JWT_SECRET", "change-me")
+
+# Role constants
+ROLE_ADMIN = "admin"
+ROLE_NORMAL = "normal"
+ROLE_READONLY = "readonly"
+
+# Roles that have write access (add/edit data, log tests)
+WRITE_ROLES = {ROLE_ADMIN, ROLE_NORMAL}
 
 
 # ─── Response helpers ─────────────────────────────────────────────────────────
@@ -111,6 +124,7 @@ def get_token_from_event(event: dict):
 
 
 def require_auth(func):
+    """Allow any authenticated user (admin, normal, readonly)."""
     @wraps(func)
     def wrapper(event, context, **kwargs):
         token = get_token_from_event(event)
@@ -124,6 +138,7 @@ def require_auth(func):
 
 
 def require_admin(func):
+    """Allow only admin users."""
     @wraps(func)
     def wrapper(event, context, **kwargs):
         token = get_token_from_event(event)
@@ -132,13 +147,14 @@ def require_admin(func):
         payload = verify_jwt(token)
         if not payload:
             return unauthorized("Invalid or expired token")
-        if payload.get("role") != "admin":
+        if payload.get("role") != ROLE_ADMIN:
             return forbidden("Admin access required")
         return func(event, context, user=payload, **kwargs)
     return wrapper
 
 
 def require_write(func):
+    """Allow admin and normal users (write access). Block readonly users."""
     @wraps(func)
     def wrapper(event, context, **kwargs):
         token = get_token_from_event(event)
@@ -147,7 +163,7 @@ def require_write(func):
         payload = verify_jwt(token)
         if not payload:
             return unauthorized("Invalid or expired token")
-        if payload.get("role") == "readonly":
-            return forbidden("Write access required")
+        if payload.get("role") not in WRITE_ROLES:
+            return forbidden("Write access required. Your account is read-only.")
         return func(event, context, user=payload, **kwargs)
     return wrapper

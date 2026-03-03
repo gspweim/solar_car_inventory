@@ -6,7 +6,7 @@ import { useAuth } from '../hooks/useAuth';
 import toast from 'react-hot-toast';
 
 export default function CarsPage() {
-  const { isAdmin } = useAuth();
+  const { isAdmin, canWrite } = useAuth();
   const qc = useQueryClient();
   const [showModal, setShowModal] = useState(false);
   const [editCar, setEditCar] = useState(null);

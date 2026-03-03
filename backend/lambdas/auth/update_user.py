@@ -1,7 +1,7 @@
 """
 PUT /auth/users/{user_id}
 Admin only. Update a user's role or status.
-Body: { "role": "admin|readonly", "status": "active|rejected" }
+Body: { "role": "admin|normal|readonly", "status": "active|rejected" }
 """
 import json
 import os
@@ -12,7 +12,7 @@ USERS_TABLE = os.environ["USERS_TABLE"]
 dynamodb = boto3.resource("dynamodb")
 users_table = dynamodb.Table(USERS_TABLE)
 
-VALID_ROLES = {"admin", "readonly"}
+VALID_ROLES = {"admin", "normal", "readonly"}
 VALID_STATUSES = {"active", "rejected"}
 
 
@@ -34,7 +34,7 @@ def handler(event, context, user=None):
     status = body.get("status")
 
     if role and role not in VALID_ROLES:
-        return bad_request(f"role must be one of: {', '.join(VALID_ROLES)}")
+        return bad_request(f"role must be one of: {', '.join(sorted(VALID_ROLES))}")
     if status and status not in VALID_STATUSES:
         return bad_request(f"status must be one of: {', '.join(VALID_STATUSES)}")
 

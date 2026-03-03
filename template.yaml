@@ -506,6 +506,27 @@ Resources:
             Path: /cars/{car_id}/miles
             Method: GET
 
+  EditMilesLogFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub "calsol-miles-edit-log-${Environment}"
+      CodeUri: backend/lambdas/miles/
+      Handler: edit_miles_log.handler
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref MilesLogTable
+        - DynamoDBCrudPolicy:
+            TableName: !Ref PartsTable
+        - DynamoDBReadPolicy:
+            TableName: !Ref PartHistoryTable
+      Events:
+        Api:
+          Type: Api
+          Properties:
+            RestApiId: !Ref CalSolApi
+            Path: /cars/{car_id}/miles/{log_id}
+            Method: PUT
+
   # Reports
   ReportHighMilesFunction:
     Type: AWS::Serverless::Function

@@ -5,7 +5,7 @@ import { listCars } from '../api/client';
 import { useQuery } from '@tanstack/react-query';
 
 export default function Layout() {
-  const { user, logout, isAdmin } = useAuth();
+  const { user, logout, isAdmin, canWrite } = useAuth();
   const navigate = useNavigate();
   const [selectedCarId, setSelectedCarId] = useState(
     () => localStorage.getItem('calsol_car_id') || ''
@@ -39,6 +39,13 @@ export default function Layout() {
 
   const carId = selectedCarId;
 
+  // Role badge display
+  const roleBadge = {
+    admin: '🔑 ADMIN',
+    normal: '✏️ NORMAL',
+    readonly: '👁️ READ ONLY',
+  }[user?.role] || user?.role?.toUpperCase();
+
   return (
     <div className="layout">
       <aside className="sidebar">
@@ -54,24 +61,28 @@ export default function Layout() {
             <>
               <div className="nav-section">Current Car</div>
               <NavLink to={`/cars/${carId}/parts`}>🔩 Parts</NavLink>
-              <NavLink to={`/cars/${carId}/miles`}>📏 Log Miles</NavLink>
+              {canWrite && (
+                <NavLink to={`/cars/${carId}/miles`}>📏 Log Miles</NavLink>
+              )}
+              {!canWrite && (
+                <NavLink to={`/cars/${carId}/miles`}>📏 Miles Log</NavLink>
+              )}
               <NavLink to={`/cars/${carId}/history`}>📋 History</NavLink>
               <NavLink to={`/cars/${carId}/reports`}>📊 Reports</NavLink>
-              <NavLink to={`/cars/${carId}/upload`}>📤 Upload</NavLink>
+              {canWrite && (
+                <NavLink to={`/cars/${carId}/upload`}>📤 Upload</NavLink>
+              )}
             </>
           )}
 
-          {isAdmin && (
-            <>
-              <div className="nav-section">Admin</div>
-              <NavLink to="/admin">👥 Users</NavLink>
-            </>
-          )}
+          {/* All authenticated users can view the users page */}
+          <div className="nav-section">{isAdmin ? 'Admin' : 'Team'}</div>
+          <NavLink to="/admin">👥 Users</NavLink>
         </nav>
         <div className="sidebar-footer">
           <div>{user?.name}</div>
           <div style={{ color: 'rgba(255,255,255,0.4)', fontSize: '0.65rem' }}>
-            {user?.role?.toUpperCase()}
+            {roleBadge}
           </div>
         </div>
       </aside>

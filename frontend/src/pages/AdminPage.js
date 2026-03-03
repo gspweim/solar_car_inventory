@@ -1,52 +1,76 @@
 import { useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { listUsers, updateUser, listPartFields, createPartField } from '../api/client';
+import { useAuth } from '../hooks/useAuth';
 import toast from 'react-hot-toast';
 
-const ROLES = ['admin', 'readonly'];
+const ROLES = ['admin', 'normal', 'readonly'];
 const STATUSES = ['active', 'rejected'];
 const FIELD_TYPES = ['text', 'number', 'dropdown'];
 
+const ROLE_LABELS = {
+  admin: '🔑 Admin',
+  normal: '✏️ Normal',
+  readonly: '👁️ Read Only',
+};
+
+const ROLE_DESCRIPTIONS = {
+  admin: 'Full access — can create, edit, delete, and manage users',
+  normal: 'Write access — can add/edit data and log tests; cannot delete or manage users',
+  readonly: 'Read-only — can view all data but cannot make any changes',
+};
+
 export default function AdminPage() {
   const qc = useQueryClient();
+  const { isAdmin } = useAuth();
   const [tab, setTab] = useState('users');
+
+  // Non-admin users only see the users tab
+  const tabs = isAdmin ? ['users', 'fields'] : ['users'];
 
   return (
     <div>
       <div className="page-header">
-        <h2>👥 Admin Panel</h2>
+        <h2>👥 {isAdmin ? 'Admin Panel' : 'Team Members'}</h2>
+        {!isAdmin && (
+          <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)', padding: '4px 10px', background: 'var(--bg)', borderRadius: 'var(--radius)', border: '1px solid var(--border)' }}>
+            👁️ View Only
+          </span>
+        )}
       </div>
 
-      <div style={{ display: 'flex', gap: '8px', marginBottom: '20px', borderBottom: '2px solid var(--border)' }}>
-        {['users', 'fields'].map((t) => (
-          <button
-            key={t}
-            onClick={() => setTab(t)}
-            style={{
-              padding: '8px 16px',
-              background: 'none',
-              border: 'none',
-              borderBottom: tab === t ? '2px solid var(--calsol-blue)' : '2px solid transparent',
-              marginBottom: '-2px',
-              cursor: 'pointer',
-              fontWeight: tab === t ? 600 : 400,
-              color: tab === t ? 'var(--calsol-blue)' : 'var(--text-muted)',
-              fontSize: '0.875rem',
-            }}
-          >
-            {t === 'users' ? '👥 Users' : '🏷️ Custom Fields'}
-          </button>
-        ))}
-      </div>
+      {tabs.length > 1 && (
+        <div style={{ display: 'flex', gap: '8px', marginBottom: '20px', borderBottom: '2px solid var(--border)' }}>
+          {tabs.map((t) => (
+            <button
+              key={t}
+              onClick={() => setTab(t)}
+              style={{
+                padding: '8px 16px',
+                background: 'none',
+                border: 'none',
+                borderBottom: tab === t ? '2px solid var(--calsol-blue)' : '2px solid transparent',
+                marginBottom: '-2px',
+                cursor: 'pointer',
+                fontWeight: tab === t ? 600 : 400,
+                color: tab === t ? 'var(--calsol-blue)' : 'var(--text-muted)',
+                fontSize: '0.875rem',
+              }}
+            >
+              {t === 'users' ? '👥 Users' : '🏷️ Custom Fields'}
+            </button>
+          ))}
+        </div>
+      )}
 
-      {tab === 'users' && <UsersTab qc={qc} />}
-      {tab === 'fields' && <FieldsTab qc={qc} />}
+      {tab === 'users' && <UsersTab qc={qc} isAdmin={isAdmin} />}
+      {tab === 'fields' && isAdmin && <FieldsTab qc={qc} />}
     </div>
   );
 }
 
 // ─── Users Tab ─────────────────────────────────────────────────────────────────
-function UsersTab({ qc }) {
+function UsersTab({ qc, isAdmin }) {
   const { data, isLoading } = useQuery({
     queryKey: ['users'],
     queryFn: listUsers,
@@ -66,58 +90,89 @@ function UsersTab({ qc }) {
   if (isLoading) return <div className="loading">Loading users…</div>;
 
   return (
-    <div className="card" style={{ padding: 0 }}>
-      <div className="table-wrapper">
-        <table>
-          <thead>
-            <tr>
-              <th>User</th>
-              <th>Email</th>
-              <th>Role</th>
-              <th>Status</th>
-            </tr>
-          </thead>
-          <tbody>
-            {users.map((u) => (
-              <tr key={u.user_id}>
-                <td>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                    {u.picture && (
-                      <img
-                        src={u.picture}
-                        alt={u.name}
-                        style={{ width: 28, height: 28, borderRadius: '50%' }}
-                        referrerPolicy="no-referrer"
-                      />
-                    )}
-                    <span>{u.name}</span>
-                  </div>
-                </td>
-                <td style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>{u.email}</td>
-                <td>
-                  <select
-                    className="form-control"
-                    style={{ width: 'auto', padding: '4px 8px', fontSize: '0.8rem' }}
-                    value={u.role}
-                    onChange={(e) => handleUpdate(u.user_id, 'role', e.target.value)}
-                  >
-                    {ROLES.map((r) => <option key={r} value={r}>{r}</option>)}
-                  </select>
-                </td>
-                <td>
-                  <select
-                    className="form-control"
-                    style={{ width: 'auto', padding: '4px 8px', fontSize: '0.8rem' }}
-                    value={u.status}
-                    onChange={(e) => handleUpdate(u.user_id, 'status', e.target.value)}
-                  >
-                    {STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
-                  </select>
-                </td>
+    <div>
+      {/* Role legend */}
+      <div className="card" style={{ marginBottom: 16, padding: '12px 16px' }}>
+        <div style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 8 }}>
+          Role Permissions
+        </div>
+        <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
+          {ROLES.map((r) => (
+            <div key={r} style={{ fontSize: '0.8rem' }}>
+              <strong>{ROLE_LABELS[r]}</strong>
+              <span style={{ color: 'var(--text-muted)', marginLeft: 6 }}>— {ROLE_DESCRIPTIONS[r]}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div className="card" style={{ padding: 0 }}>
+        <div className="table-wrapper">
+          <table>
+            <thead>
+              <tr>
+                <th>User</th>
+                <th>Email</th>
+                <th>Role</th>
+                <th>Status</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {users.map((u) => (
+                <tr key={u.user_id}>
+                  <td>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      {u.picture && (
+                        <img
+                          src={u.picture}
+                          alt={u.name}
+                          style={{ width: 28, height: 28, borderRadius: '50%' }}
+                          referrerPolicy="no-referrer"
+                        />
+                      )}
+                      <span>{u.name}</span>
+                    </div>
+                  </td>
+                  <td style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>{u.email}</td>
+                  <td>
+                    {isAdmin ? (
+                      <select
+                        className="form-control"
+                        style={{ width: 'auto', padding: '4px 8px', fontSize: '0.8rem' }}
+                        value={u.role}
+                        onChange={(e) => handleUpdate(u.user_id, 'role', e.target.value)}
+                      >
+                        {ROLES.map((r) => (
+                          <option key={r} value={r}>{ROLE_LABELS[r]}</option>
+                        ))}
+                      </select>
+                    ) : (
+                      <span className={`badge badge-${u.role === 'admin' ? 'critical' : u.role === 'normal' ? 'medium' : 'unknown'}`}>
+                        {ROLE_LABELS[u.role] || u.role}
+                      </span>
+                    )}
+                  </td>
+                  <td>
+                    {isAdmin ? (
+                      <select
+                        className="form-control"
+                        style={{ width: 'auto', padding: '4px 8px', fontSize: '0.8rem' }}
+                        value={u.status}
+                        onChange={(e) => handleUpdate(u.user_id, 'status', e.target.value)}
+                      >
+                        {STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
+                      </select>
+                    ) : (
+                      <span className={`badge badge-${u.status === 'active' ? 'low' : 'critical'}`}>
+                        {u.status}
+                      </span>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       </div>
     </div>
   );
