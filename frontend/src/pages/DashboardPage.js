@@ -144,7 +144,7 @@ export default function DashboardPage() {
                 </tr>
               </thead>
               <tbody>
-                {[...milesLog].sort((a, b) => (a.test_date > b.test_date ? 1 : -1)).slice(0, 6).map((m) => (
+                {[...milesLog].sort((a, b) => (a.test_date > b.test_date ? -1 : 1)).slice(0, 6).map((m) => (
                   <tr key={m.log_id}>
                     <td>{m.test_date}</td>
                     <td>{parseFloat(m.miles).toFixed(1)}</td>
