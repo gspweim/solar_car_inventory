@@ -7,6 +7,7 @@ Required body fields:
 
 Optional standard fields:
   miles_used (default 0)
+  start_date (ISO date string, defaults to today)
 
 Optional dynamic fields (any key/value pairs under "extra_fields"):
   { "wrench_size": "10mm", "thread": "M8", "designer": "Alice", ... }
@@ -54,6 +55,8 @@ def handler(event, context, user=None):
         return bad_request(f"part_location must be one of: {', '.join(VALID_LOCATIONS)}")
 
     now = datetime.now(timezone.utc).isoformat()
+    today = datetime.now(timezone.utc).date().isoformat()
+
     part = {
         "part_id": str(uuid.uuid4()),
         "car_id": car_id,
@@ -66,11 +69,16 @@ def handler(event, context, user=None):
         "created_at": now,
         "updated_at": now,
         "created_by": user["email"],
+        # Start/end dates for part-car assignment tracking
+        "start_date": body.get("start_date", today),
+        "end_date": None,
         # Optional standard fields
         "purchased_from": body.get("purchased_from", ""),
         "cost": body.get("cost", ""),
         # Dynamic extra fields stored as a flat map
         "extra_fields": body.get("extra_fields", {}),
     }
+    # Remove None values for DynamoDB compatibility
+    part = {k: v for k, v in part.items() if v is not None}
     parts_table.put_item(Item=part)
     return created({"part": part})

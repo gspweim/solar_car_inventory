@@ -13,7 +13,7 @@ const LOCATIONS = [
 
 export default function PartDetailPage() {
   const { carId, partId } = useParams();
-  const { canWrite, canDelete } = useAuth();
+  const { canWrite, isAdmin } = useAuth();
   const qc = useQueryClient();
   const navigate = useNavigate();
   const [editing, setEditing] = useState(false);
@@ -103,6 +103,20 @@ export default function PartDetailPage() {
             </div>
           </div>
 
+          {/* Assignment dates */}
+          <div className="card">
+            <h3 style={{ marginBottom: 16 }}>Assignment Dates</h3>
+            <div className="form-row">
+              <Field label="Start Date (added to car)" value={part.start_date || '—'} />
+              <Field label="End Date (removed from car)" value={part.end_date || 'Still active'} />
+            </div>
+            {isAdmin && (
+              <div style={{ marginTop: 8, fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                ✏️ Admins can edit these dates in Edit mode.
+              </div>
+            )}
+          </div>
+
           {/* Extra fields */}
           {Object.keys(part.extra_fields || {}).length > 0 && (
             <div className="card">
@@ -177,6 +191,31 @@ export default function PartDetailPage() {
               <input className="form-control" value={form.purchased_from || ''}
                 onChange={(e) => set('purchased_from', e.target.value)} />
             </div>
+
+            {/* Admin-only: assignment dates */}
+            {isAdmin && (
+              <>
+                <div style={{ borderTop: '1px solid var(--border)', margin: '12px 0', paddingTop: '12px' }}>
+                  <strong style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+                    🔑 ADMIN: ASSIGNMENT DATES
+                  </strong>
+                </div>
+                <div className="form-row">
+                  <div className="form-group">
+                    <label>Start Date <span style={{ color: 'var(--text-muted)', fontSize: '0.75rem' }}>(added to car)</span></label>
+                    <input className="form-control" type="date"
+                      value={form.start_date || ''}
+                      onChange={(e) => set('start_date', e.target.value)} />
+                  </div>
+                  <div className="form-group">
+                    <label>End Date <span style={{ color: 'var(--text-muted)', fontSize: '0.75rem' }}>(removed from car, leave blank if still active)</span></label>
+                    <input className="form-control" type="date"
+                      value={form.end_date || ''}
+                      onChange={(e) => set('end_date', e.target.value || '')} />
+                  </div>
+                </div>
+              </>
+            )}
 
             {/* Dynamic extra fields */}
             {fields.length > 0 && (

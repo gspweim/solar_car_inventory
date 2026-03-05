@@ -7,7 +7,9 @@ Body:
 {
   "miles": 12.5,
   "note": "Morning test session on track",
-  "test_date": "2024-03-15"   // optional, defaults to today UTC
+  "test_date": "2024-03-15",   // optional, defaults to today UTC
+  "laps": 10,                  // optional
+  "miles_per_lap": 1.25        // optional
 }
 """
 import json
@@ -53,6 +55,10 @@ def handler(event, context, user=None):
     test_date = body.get("test_date", datetime.now(timezone.utc).date().isoformat())
     now = datetime.now(timezone.utc).isoformat()
 
+    # Optional laps and miles_per_lap
+    laps = body.get("laps")
+    miles_per_lap = body.get("miles_per_lap")
+
     # 1. Write the miles log entry
     log_entry = {
         "log_id": str(uuid.uuid4()),
@@ -63,6 +69,17 @@ def handler(event, context, user=None):
         "logged_at": now,
         "logged_by": user["email"],
     }
+    if laps is not None:
+        try:
+            log_entry["laps"] = int(laps)
+        except (TypeError, ValueError):
+            return bad_request("laps must be an integer")
+    if miles_per_lap is not None:
+        try:
+            log_entry["miles_per_lap"] = str(float(miles_per_lap))
+        except (TypeError, ValueError):
+            return bad_request("miles_per_lap must be a number")
+
     miles_table.put_item(Item=log_entry)
 
     # 2. Fetch all active parts for this car
@@ -88,8 +105,20 @@ def handler(event, context, user=None):
             },
         )
 
+    # Convert miles_per_lap back to float for response
+    response_entry = dict(log_entry)
+    try:
+        response_entry["miles"] = float(response_entry["miles"])
+    except (TypeError, ValueError):
+        pass
+    if "miles_per_lap" in response_entry:
+        try:
+            response_entry["miles_per_lap"] = float(response_entry["miles_per_lap"])
+        except (TypeError, ValueError):
+            pass
+
     return ok({
         "message": f"Logged {miles} miles for {len(active_parts)} active parts",
-        "log": log_entry,
+        "log": response_entry,
         "parts_updated": len(active_parts),
     })

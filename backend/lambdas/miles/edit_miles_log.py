@@ -2,18 +2,18 @@
 PUT /cars/{car_id}/miles/{log_id}
 Write access required.
 
-Edit the most recent test session for a car.
-- Only the most recent log entry (by logged_at) may be edited.
-- If any part has been added or removed (via replace/retire/create) since the
-  log entry was created, the edit is blocked to prevent data inconsistency.
-- Editing the miles applies a delta to all currently active parts.
-- Editing the note or test_date is always allowed (no delta needed).
+Edit any test session for a car (not just the most recent).
+- Editing the miles applies a delta to all parts that were active at the time
+  of the test (start_date <= test_date AND (end_date is null OR end_date >= test_date)).
+- Editing the note, test_date, laps, or miles_per_lap is always allowed.
 
 Body:
 {
   "miles": 11.5,          // optional – new miles value
   "note": "updated note", // optional
-  "test_date": "2024-03-15" // optional
+  "test_date": "2024-03-15", // optional
+  "laps": 10,             // optional
+  "miles_per_lap": 1.15   // optional
 }
 """
 import json
@@ -32,6 +32,21 @@ dynamodb = boto3.resource("dynamodb")
 miles_table = dynamodb.Table(MILES_LOG_TABLE)
 parts_table = dynamodb.Table(PARTS_TABLE)
 history_table = dynamodb.Table(PART_HISTORY_TABLE)
+
+
+def part_was_active_on_date(part, test_date):
+    """
+    Returns True if the part was active (on the car) on the given test_date.
+    Uses start_date and end_date fields. Falls back to always-active if no dates set.
+    """
+    start_date = part.get("start_date", "")
+    end_date = part.get("end_date", "")
+
+    if start_date and test_date < start_date:
+        return False
+    if end_date and test_date > end_date:
+        return False
+    return True
 
 
 @require_write
@@ -59,66 +74,16 @@ def handler(event, context, user=None):
     if log_entry.get("car_id") != car_id:
         return forbidden("Log entry does not belong to this car")
 
-    # ── 2. Verify this is the most recent log entry for the car ───────────────
-    recent_resp = miles_table.query(
-        IndexName="car-miles-index",
-        KeyConditionExpression=Key("car_id").eq(car_id),
-        ScanIndexForward=False,
-        Limit=1,
-    )
-    recent_items = recent_resp.get("Items", [])
-    if not recent_items or recent_items[0]["log_id"] != log_id:
-        return bad_request(
-            "Only the most recent test session can be edited. "
-            "This is not the latest session for this car."
-        )
-
-    logged_at = log_entry.get("logged_at", "")
-
-    # ── 3. Check for part changes since this log entry ────────────────────────
-    # Check if any part was retired (replaced) after the log was created
-    history_resp = history_table.query(
-        IndexName="car-history-index",
-        KeyConditionExpression=(
-            Key("car_id").eq(car_id) & Key("replaced_at").gt(logged_at)
-        ),
-    )
-    history_after = history_resp.get("Items", [])
-
-    # Check if any new part was created after the log was created
-    all_parts_resp = parts_table.query(
-        IndexName="car-index",
-        KeyConditionExpression=Key("car_id").eq(car_id),
-    )
-    all_parts = all_parts_resp.get("Items", [])
-    new_parts_after = [
-        p for p in all_parts
-        if p.get("created_at", "") > logged_at
-    ]
-
-    if history_after or new_parts_after:
-        changed_descriptions = []
-        for h in history_after:
-            changed_descriptions.append(
-                f"'{h.get('part_name', h.get('part_number', 'unknown'))}' was replaced/retired"
-            )
-        for p in new_parts_after:
-            changed_descriptions.append(
-                f"'{p.get('part_name', p.get('part_number', 'unknown'))}' was added"
-            )
-        detail = "; ".join(changed_descriptions)
-        return bad_request(
-            f"Cannot edit this test session because parts have changed since it was logged: {detail}. "
-            "Editing miles would produce incorrect part mileage."
-        )
-
-    # ── 4. Determine what's changing ──────────────────────────────────────────
+    # ── 2. Determine what's changing ──────────────────────────────────────────
     new_miles_raw = body.get("miles")
     new_note = body.get("note")
     new_test_date = body.get("test_date")
+    new_laps = body.get("laps")
+    new_miles_per_lap = body.get("miles_per_lap")
 
-    if new_miles_raw is None and new_note is None and new_test_date is None:
-        return bad_request("Nothing to update. Provide miles, note, and/or test_date.")
+    if (new_miles_raw is None and new_note is None and new_test_date is None
+            and new_laps is None and new_miles_per_lap is None):
+        return bad_request("Nothing to update. Provide miles, note, test_date, laps, and/or miles_per_lap.")
 
     now = datetime.now(timezone.utc).isoformat()
     updates = []
@@ -137,7 +102,25 @@ def handler(event, context, user=None):
         expr_names["#test_date"] = "test_date"
         expr_values[":test_date"] = new_test_date
 
+    if new_laps is not None:
+        updates.append("#laps = :laps")
+        expr_names["#laps"] = "laps"
+        try:
+            expr_values[":laps"] = int(new_laps)
+        except (TypeError, ValueError):
+            return bad_request("laps must be an integer")
+
+    if new_miles_per_lap is not None:
+        updates.append("#miles_per_lap = :miles_per_lap")
+        expr_names["#miles_per_lap"] = "miles_per_lap"
+        try:
+            expr_values[":miles_per_lap"] = str(float(new_miles_per_lap))
+        except (TypeError, ValueError):
+            return bad_request("miles_per_lap must be a number")
+
     miles_delta = Decimal("0")
+    test_date_for_delta = new_test_date or log_entry.get("test_date", "")
+
     if new_miles_raw is not None:
         try:
             new_miles = float(new_miles_raw)
@@ -153,7 +136,7 @@ def handler(event, context, user=None):
         expr_names["#miles"] = "miles"
         expr_values[":miles"] = str(new_miles)  # stored as string like original
 
-    # ── 5. Update the log entry ───────────────────────────────────────────────
+    # ── 3. Update the log entry ───────────────────────────────────────────────
     miles_table.update_item(
         Key={"log_id": log_id},
         UpdateExpression="SET " + ", ".join(updates),
@@ -161,11 +144,19 @@ def handler(event, context, user=None):
         ExpressionAttributeValues=expr_values,
     )
 
-    # ── 6. Apply delta to all active parts ────────────────────────────────────
+    # ── 4. Apply delta to parts active at the test date ───────────────────────
     parts_updated = 0
     if miles_delta != Decimal("0"):
-        active_parts = [p for p in all_parts if p.get("active", True)]
-        for part in active_parts:
+        # Fetch ALL parts for this car (active and retired) to check date ranges
+        all_parts_resp = parts_table.query(
+            IndexName="car-index",
+            KeyConditionExpression=Key("car_id").eq(car_id),
+        )
+        all_parts = all_parts_resp.get("Items", [])
+
+        for part in all_parts:
+            if not part_was_active_on_date(part, test_date_for_delta):
+                continue
             current_miles = Decimal(str(part.get("miles_used", 0)))
             new_part_miles = current_miles + miles_delta
             # Clamp to 0 to avoid negative miles

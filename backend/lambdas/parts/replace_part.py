@@ -3,15 +3,16 @@ POST /cars/{car_id}/parts/{part_id}/replace
 Write access required.
 
 Workflow:
-1. Mark the current part as inactive (retired) and log it to PartHistory
-2. If "replace_with_same" is true, create a new part with the same model but 0 miles
+1. Mark the current part as inactive (retired), set end_date, and log it to PartHistory
+2. If "replace_with_same" is true, create a new part with the same model but 0 miles and today's start_date
 3. Return the history record and (optionally) the new part
 
 Body:
 {
   "reason": "failure|upgrade|routine_maintenance|other",
   "note": "Free text explanation",
-  "replace_with_same": true|false
+  "replace_with_same": true|false,
+  "end_date": "2024-03-15"   // optional, defaults to today
 }
 """
 import json
@@ -67,17 +68,20 @@ def handler(event, context, user=None):
         return bad_request("Part is already retired")
 
     now = datetime.now(timezone.utc).isoformat()
+    today = datetime.now(timezone.utc).date().isoformat()
+    end_date = body.get("end_date", today)
 
-    # 1. Mark old part as inactive
+    # 1. Mark old part as inactive, set end_date
     parts_table.update_item(
         Key={"part_id": part_id},
-        UpdateExpression="SET #active = :false, #updated_at = :now, #retired_at = :now",
+        UpdateExpression="SET #active = :false, #updated_at = :now, #retired_at = :now, #end_date = :end_date",
         ExpressionAttributeNames={
             "#active": "active",
             "#updated_at": "updated_at",
             "#retired_at": "retired_at",
+            "#end_date": "end_date",
         },
-        ExpressionAttributeValues={":false": False, ":now": now},
+        ExpressionAttributeValues={":false": False, ":now": now, ":end_date": end_date},
     )
 
     # 2. Write history record
@@ -90,6 +94,8 @@ def handler(event, context, user=None):
         "part_group": old_part.get("part_group", ""),
         "part_location": old_part.get("part_location", ""),
         "miles_at_retirement": old_part.get("miles_used", 0),
+        "start_date": old_part.get("start_date", ""),
+        "end_date": end_date,
         "reason": reason,
         "note": note,
         "replaced_by": user["email"],
@@ -100,7 +106,7 @@ def handler(event, context, user=None):
 
     new_part = None
     if replace_with_same:
-        # 3. Create a fresh copy with 0 miles
+        # 3. Create a fresh copy with 0 miles and today's start_date
         new_part = {
             "part_id": str(uuid.uuid4()),
             "car_id": car_id,
@@ -113,6 +119,7 @@ def handler(event, context, user=None):
             "created_at": now,
             "updated_at": now,
             "created_by": user["email"],
+            "start_date": today,
             "purchased_from": old_part.get("purchased_from", ""),
             "cost": old_part.get("cost", ""),
             "extra_fields": old_part.get("extra_fields", {}),

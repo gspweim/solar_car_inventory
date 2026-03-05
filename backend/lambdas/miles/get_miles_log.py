@@ -8,7 +8,7 @@ Query params:
 """
 import os
 import boto3
-from boto3.dynamodb.conditions import Key, Attr
+from boto3.dynamodb.conditions import Key
 from utils import ok, bad_request, require_auth
 
 MILES_LOG_TABLE = os.environ["MILES_LOG_TABLE"]
@@ -49,12 +49,22 @@ def handler(event, context, user=None):
     resp = miles_table.query(**query_kwargs)
     items = resp.get("Items", [])
 
-    # Convert miles string back to float for the response
+    # Convert numeric string fields back to numbers for the response
     for item in items:
         try:
             item["miles"] = float(item["miles"])
         except (TypeError, ValueError):
             pass
+        if "miles_per_lap" in item:
+            try:
+                item["miles_per_lap"] = float(item["miles_per_lap"])
+            except (TypeError, ValueError):
+                pass
+        if "laps" in item:
+            try:
+                item["laps"] = int(item["laps"])
+            except (TypeError, ValueError):
+                pass
 
     total_miles = sum(item.get("miles", 0) for item in items if isinstance(item.get("miles"), float))
 
