@@ -33,11 +33,6 @@ export default function DashboardPage() {
   // Total miles driven by the car = sum of all logged session miles
   const totalMiles = milesLog.reduce((sum, m) => sum + parseFloat(m.miles || 0), 0);
 
-  const maxPartMiles = parts.reduce((sum, p) => {
-    const m = parseFloat(p.miles_used || 0);
-    return sum > m ? sum : m;
-  }, 0);
-
   const groupCounts = parts.reduce((acc, p) => {
     acc[p.part_group] = (acc[p.part_group] || 0) + 1;
     return acc;

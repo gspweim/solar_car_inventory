@@ -1,5 +1,5 @@
-import { Outlet, NavLink, useNavigate, useParams } from 'react-router-dom';
-import { useState, useEffect } from 'react';
+import { Outlet, NavLink, useNavigate } from 'react-router-dom';
+import { useState, useEffect, useMemo } from 'react';
 import { useAuth } from '../hooks/useAuth';
 import { listCars } from '../api/client';
 import { useQuery } from '@tanstack/react-query';
@@ -15,7 +15,7 @@ export default function Layout() {
     queryKey: ['cars'],
     queryFn: listCars,
   });
-  const cars = carsData?.cars || [];
+  const cars = useMemo(() => carsData?.cars || [], [carsData]);
 
   useEffect(() => {
     if (cars.length > 0 && !selectedCarId) {

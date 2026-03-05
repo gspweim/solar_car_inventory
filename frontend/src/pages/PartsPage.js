@@ -421,7 +421,7 @@ function ReplacePartModal({ carId, part, onClose, onSaved }) {
     if (!reason) { toast.error('Please select a reason'); return; }
     setSaving(true);
     try {
-      const result = await replacePart(carId, part.part_id, {
+      await replacePart(carId, part.part_id, {
         reason, note, replace_with_same: replaceWithSame,
       });
       toast.success('Part replaced and logged!');

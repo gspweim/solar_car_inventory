@@ -1,6 +1,6 @@
 import { useState } from 'react';
-import { useParams, useNavigate, Link } from 'react-router-dom';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useParams, Link } from 'react-router-dom';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { getPart, updatePart, listPartFields } from '../api/client';
 import { useAuth } from '../hooks/useAuth';
 import toast from 'react-hot-toast';
@@ -15,7 +15,6 @@ export default function PartDetailPage() {
   const { carId, partId } = useParams();
   const { canWrite, isAdmin } = useAuth();
   const qc = useQueryClient();
-  const navigate = useNavigate();
   const [editing, setEditing] = useState(false);
   const [form, setForm] = useState(null);
   const [extraFields, setExtraFields] = useState({});

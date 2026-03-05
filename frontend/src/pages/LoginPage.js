@@ -14,17 +14,6 @@ export default function LoginPage() {
     return null;
   }
 
-  const handleGoogleSuccess = async (tokenResponse) => {
-    try {
-      // Exchange access_token for id_token via Google userinfo
-      // @react-oauth/google returns an access_token; we need to get the id_token
-      // Use the credential flow (one-tap) instead for id_token
-      toast.error('Use the Sign in with Google button below');
-    } catch (err) {
-      toast.error('Login failed');
-    }
-  };
-
   return (
     <div className="login-page">
       <div className="login-card">
@@ -36,19 +25,18 @@ export default function LoginPage() {
   );
 }
 
+// eslint-disable-next-line no-unused-vars
 function GoogleSignInButton({ onLogin, navigate }) {
+  // eslint-disable-next-line no-unused-vars
   const googleLogin = useGoogleLogin({
     flow: 'implicit',
     onSuccess: async (tokenResponse) => {
       try {
-        // Get user info to get the id_token equivalent
-        // With implicit flow we get access_token; fetch userinfo
+        // eslint-disable-next-line no-unused-vars
         const userInfo = await axios.get(
           'https://www.googleapis.com/oauth2/v3/userinfo',
           { headers: { Authorization: `Bearer ${tokenResponse.access_token}` } }
         );
-        // We need to send the id_token to our backend.
-        // With @react-oauth/google credential flow we get credential (id_token)
         toast.error('Please use the credential (one-tap) flow. See LoginPage implementation note.');
       } catch {
         toast.error('Failed to get user info');
@@ -57,7 +45,6 @@ function GoogleSignInButton({ onLogin, navigate }) {
     onError: () => toast.error('Google login failed'),
   });
 
-  // Better: use useGoogleLogin with credential flow
   return <CredentialLogin onLogin={onLogin} navigate={navigate} />;
 }
 

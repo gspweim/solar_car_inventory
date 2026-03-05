@@ -18,13 +18,6 @@ function RequireAuth({ children }) {
   return children;
 }
 
-function RequireAdmin({ children }) {
-  const { user, isAdmin } = useAuth();
-  if (!user) return <Navigate to="/login" replace />;
-  if (!isAdmin) return <Navigate to="/" replace />;
-  return children;
-}
-
 /**
  * Admin page is accessible to all authenticated users:
  * - Admin: can view AND edit users (change roles/status)

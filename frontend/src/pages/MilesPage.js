@@ -27,10 +27,9 @@ export default function MilesPage() {
     enabled: !!carId,
   });
 
-  const rawLog = data?.log || [];
-
   // Sort the log
   const log = useMemo(() => {
+    const rawLog = data?.log || [];
     const sorted = [...rawLog].sort((a, b) => {
       let aVal = a[sortCol] ?? '';
       let bVal = b[sortCol] ?? '';
@@ -43,7 +42,7 @@ export default function MilesPage() {
       return 0;
     });
     return sorted;
-  }, [rawLog, sortCol, sortDir]);
+  }, [data, sortCol, sortDir]);
 
   const handleSort = (col) => {
     if (sortCol === col) {
