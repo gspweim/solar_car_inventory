@@ -50,6 +50,9 @@ export function AuthProvider({ children }) {
     }
   }, [logout]);
 
+  // Status checks
+  const isPending = user?.status === 'pending';
+
   // Role checks
   const isAdmin = user?.role === 'admin';
   const isNormal = user?.role === 'normal';
@@ -74,6 +77,7 @@ export function AuthProvider({ children }) {
       login,
       logout,
       refreshUser,
+      isPending,
       isAdmin,
       isNormal,
       isReadOnly,

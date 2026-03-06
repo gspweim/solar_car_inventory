@@ -11,10 +11,31 @@ import ReportsPage from './pages/ReportsPage';
 import UploadPage from './pages/UploadPage';
 import AdminPage from './pages/AdminPage';
 import CarsPage from './pages/CarsPage';
+import PendingApprovalPage from './pages/PendingApprovalPage';
 
+/**
+ * Guard for all main app routes.
+ * - Not logged in → /login
+ * - Logged in but pending approval → /pending
+ * - Otherwise → render the page
+ */
 function RequireAuth({ children }) {
-  const { user } = useAuth();
+  const { user, isPending } = useAuth();
   if (!user) return <Navigate to="/login" replace />;
+  if (isPending) return <Navigate to="/pending" replace />;
+  return children;
+}
+
+/**
+ * Guard for the /pending route itself.
+ * - Not logged in → /login
+ * - Logged in and NOT pending (already approved) → /
+ * - Pending → show the page
+ */
+function RequirePending({ children }) {
+  const { user, isPending } = useAuth();
+  if (!user) return <Navigate to="/login" replace />;
+  if (!isPending) return <Navigate to="/" replace />;
   return children;
 }
 
@@ -34,6 +55,17 @@ export default function App() {
   return (
     <Routes>
       <Route path="/login" element={<LoginPage />} />
+
+      {/* Pending approval page — shown to users who haven't been activated yet */}
+      <Route
+        path="/pending"
+        element={
+          <RequirePending>
+            <PendingApprovalPage />
+          </RequirePending>
+        }
+      />
+
       <Route
         path="/"
         element={

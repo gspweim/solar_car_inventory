@@ -98,7 +98,7 @@ def handler(event, context):
             "picture": picture,
             "google_sub": google_sub,
             "role": "admin" if is_first else "readonly",
-            "status": "active",
+            "status": "active" if is_first else "pending",
         }
         users_table.put_item(Item=user)
 
@@ -115,6 +115,7 @@ def handler(event, context):
         "email": user["email"],
         "name": user["name"],
         "role": user["role"],
+        "status": user.get("status", "pending"),
     })
 
     return ok({
@@ -125,5 +126,6 @@ def handler(event, context):
             "name": user["name"],
             "picture": user["picture"],
             "role": user["role"],
+            "status": user.get("status", "pending"),
         },
     })
